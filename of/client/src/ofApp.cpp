@@ -50,7 +50,14 @@ void ofApp::audioOut(){
 void ofApp::update(){
     
     char udpMessage[100];
-    while (udpConnection.Receive(udpMessage, 100) == 0) {}
+    string message;
+    while (message.compare("sendpitch") != 0) {
+        cout << message.compare("sendpitch");
+        //cout << "looping\n";
+        cout << message;
+        udpConnection.Receive(udpMessage, 100);
+        message = udpMessage;
+    }
     
     // update pitch info
     pitchConfidence = pitch.pitchConfidence;

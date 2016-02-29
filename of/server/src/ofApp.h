@@ -29,6 +29,8 @@ public:
     void audioOut();
     
 private:
+    bool noConnection = false;
+    float avgConfidence, hzPitch, clientHzPitch;
     ofxAubioPitch pitch;
     
     ofxUDPManager udpConnection;
@@ -38,8 +40,10 @@ private:
     ofxFloatSlider pitchConfidence, clientConfidenceSlider;
     
     deque<float> filteredPitchConfidence;
+    deque<float> filteredPitchMidi;
     const int FILTER_SIZE = 10;
     
+    char udpMessage[100];
     ofPolyline pitchPlot;
     
 };

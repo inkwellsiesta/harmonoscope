@@ -2,6 +2,7 @@
 
 //--------------------------------------------------------------
 void ofApp::setup(){
+    noConnection = true;
     // set the size of the window
     ofSetWindowShape(750, 750);
     //ofSetVerticalSync(true);
@@ -57,68 +58,85 @@ void ofApp::audioOut(){
 
 //--------------------------------------------------------------
 void ofApp::update(){
+    if (noConnection) {
+        clientHzPitch = pow(2, (55. - 69.)/12.)*440.;
+        clientConfidenceSlider = 1.f;
+    }
+    else  {
+        char messageOut[20];
+        sprintf(messageOut, "%llu\n", ofGetSystemTime());
+        //cout << messageOut << endl;
+        udpConnection.Send(messageOut, 20);
+        
+        string message;
+        int pos = -1;
+        udpConnection.Receive(udpMessage, 100);
+        message = udpMessage;
+        
+        pos = message.find('\t');
+        if (pos >= 0) {
+            string confStr = message.substr(0, pos);
+            string pitchStr = message.substr(pos+1);
+            
+            //  cout << confStr << ", " << pitchStr;
+            clientPitchSlider = ofFromString<float>(pitchStr);
+            clientHzPitch = pow(2, (clientPitchSlider - 69.)/12.)*440.;
+            clientConfidenceSlider = ofFromString<float>(confStr);
+        }
+    }
+    // update pitch info
+    if (pitch.latestPitch) midiPitch = pitch.latestPitch;
+    
+    // filter using an average window
+    filteredPitchMidi.push_back(midiPitch);
+    if (filteredPitchMidi.size() > FILTER_SIZE) filteredPitchMidi.pop_front();
+    float avgMidi = 0.;
+    for (float eachMidi : filteredPitchMidi) {
+        avgMidi+=eachMidi;
+    }
+    avgMidi/=filteredPitchMidi.size();
+    cout << avgMidi << " vs " << midiPitch << endl;
+    // Convert from midi to actual frequency
+    hzPitch = pow(2, (avgMidi - 69.)/12.)*440.;
+    
+    
+    pitchConfidence = pitch.pitchConfidence;
+    // filter using an average window
+    filteredPitchConfidence.push_back(pitchConfidence);
+    if (filteredPitchConfidence.size() > FILTER_SIZE) filteredPitchConfidence.pop_front();
+    avgConfidence = 0.;
+    for (int i = 0; i < filteredPitchConfidence.size(); ++i) {
+        avgConfidence+=filteredPitchConfidence[i];
+    }
+    avgConfidence = 1;// /=filteredPitchConfidence.size();
+    
+    
 }
 
 //--------------------------------------------------------------
 void ofApp::draw(){
-    udpConnection.Send("sendpitch", 9);
-    
-    char udpMessage[100];
-    while (udpConnection.Receive(udpMessage, 100) == 0) {}
-    
-    // update pitch info
-    pitchConfidence = pitch.pitchConfidence;
-    if (pitch.latestPitch) midiPitch = pitch.latestPitch;
-    
-    int hzPitch = pow(2, (midiPitch - 69.)/12.)*440.;
-    
-    string message=udpMessage;
-    cout << message << endl;
-    
-    int pos = message.find('\t');
-    if (pos >= 0) {
-        string confStr = message.substr(0, pos);
-        string pitchStr = message.substr(pos+1);
-        //  cout << confStr << ", " << pitchStr;
-        clientPitchSlider = ofFromString<float>(pitchStr);
-        int clientHzPitch = pow(2, (clientPitchSlider - 69.)/12.)*440.;
-        clientConfidenceSlider = ofFromString<float>(confStr);
+    pitchPlot.clear();
+    float confidenceThreshold = .3;
+    float dt = .001;
+    float decay = -.05;
+    for (float i = HALF_PI; i < TWO_PI + HALF_PI; i+=dt) {
+        float x = clientConfidenceSlider < confidenceThreshold ? ofGetWidth()/2. : (clientConfidenceSlider * sin(clientHzPitch / TWO_PI * i)*exp(i*decay) + 1.)*ofGetWidth()/2.;
+        float y = avgConfidence < confidenceThreshold ? ofGetHeight()/2. : (avgConfidence * sin(hzPitch / TWO_PI * i)*exp(i*decay) + 1.)*ofGetHeight()/2.;
         
-        //      clientPitchSlider = pow(2, (55. - 69.)/12.)*440.;
-        //     clientConfidenceSlider = 1.f;
-        
-        
-        
-        filteredPitchConfidence.push_back(pitchConfidence);
-        if (filteredPitchConfidence.size() > FILTER_SIZE) filteredPitchConfidence.pop_front();
-        
-        float avgConfidence = 0.;
-        for (int i = 0; i < filteredPitchConfidence.size(); ++i) {
-            avgConfidence+=filteredPitchConfidence[i];
-        }
-        avgConfidence/=filteredPitchConfidence.size();
-        
-        pitchPlot.clear();
-        float confidenceThreshold = .3;
-        float dt = .005;
-        for (float i = PI * PI / 69.; i < TWO_PI + PI * PI / 69.; i+=dt) {
-            float x = clientConfidenceSlider < confidenceThreshold ? ofGetWidth()/2. : (clientConfidenceSlider * sin(clientHzPitch / TWO_PI * i) + 1.)*ofGetWidth()/2.;
-            float y = avgConfidence < confidenceThreshold ? ofGetHeight()/2. : (avgConfidence * sin(hzPitch / TWO_PI * i) + 1.)*ofGetHeight()/2.;
-            
-            pitchPlot.curveTo(ofVec2f(x,y));
-        }
-        
-        for (float width = 1; width < 50; width*=2)
-        {
-            ofSetLineWidth(avgConfidence*width);
-            ofSetColor(255, 100/width);
-            pitchPlot.draw();
-        }
-        
-        // draw
-        pitchGui.draw();
-        clientPitchGui.draw();
+        pitchPlot.curveTo(ofVec2f(x,y));
     }
+    
+    for (float width = 1; width < 50; width*=2)
+    {
+        ofSetLineWidth(avgConfidence*width);
+        ofSetColor(255, 100/width);
+        pitchPlot.draw();
+    }
+    
+    
+    // draw
+    pitchGui.draw();
+    clientPitchGui.draw();
 }
 
 //--------------------------------------------------------------
