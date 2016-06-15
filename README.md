@@ -2,5 +2,5 @@
 
 ## Dependencies
 
-openFrameworks v8.4
+openFrameworks v8.4  
 aubio
